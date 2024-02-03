@@ -9,4 +9,4 @@ Later other useful Dagor Engine specific features will be added to improve the p
 
 ## Gaijin MSBuild Utilities
 
-It is a [library](https://github.com/GaijinEntertainment/DagorEngine/blob/main/prog/_jBuild/msbuild/Gaijin.MSBuild.Utilities.dll) containing custom [MSBuild Taks](https://learn.microsoft.com/en-us/visualstudio/msbuild/task-writing) which are used by the [DagorEngine's Visual Studio Solution](https://github.com/GaijinEntertainment/DagorEngine) to build and provide basic intellisense functionalities.
+It is a [library](https://github.com/GaijinEntertainment/DagorEngine/blob/main/prog/_jBuild/msbuild/Gaijin.MSBuild.Utilities.dll) containing custom [MSBuild Tasks](https://learn.microsoft.com/en-us/visualstudio/msbuild/task-writing) which are used by the [DagorEngine's Visual Studio Solution](https://github.com/GaijinEntertainment/DagorEngine/blob/main/DagorEngine.sln) to build and provide basic intellisense functionalities.
