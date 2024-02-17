@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Management;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 
@@ -11,6 +12,8 @@ namespace Gaijin.MSBuild.Utilities
 {
     public class Exec : Microsoft.Build.Tasks.Exec
     {
+        public string SolutionDirectory { get; set; }
+
         readonly Regex regexPath;
         readonly Regex regexUnit;
 
@@ -21,76 +24,130 @@ namespace Gaijin.MSBuild.Utilities
         public Exec() : base()
         {
             regexPath = new Regex("(^\\.\\.?\\/[^\\n\" ?: *<>|]+\\.[A-z0 - 9]+)(.*)");
-            regexUnit = new Regex(@"\.(?:cpp|c|cc|inl|lib|asm|masm|s|das|rc|exe|elf|self)$");
+            regexUnit = new Regex(@"\.(?:cpp|c|cc|inl|lib|asm|masm|S|das|rc|exe|elf|self|hlsl|pssl|js|html)$");
+        }
+
+        private static bool TryParseInt(ReadOnlySpan<char> s, out int result)
+        {
+            result = 0;
+            for (int i = 0; i < s.Length; i++)
+            {
+                if (!char.IsDigit(s[i]))
+                    return false;
+                result = result * 10 + (s[i] - '0');
+            }
+            return true;
+        }
+
+        unsafe private static void Append(ref StringBuilder sb, ReadOnlySpan<char> s)
+        {
+            fixed (char* cp = s)
+            {
+                sb.Append(cp, s.Length);
+            }
         }
 
         protected override void LogEventsFromTextOutput(string singleLine, MessageImportance messageImportance)
         {
-            if (singleLine.StartsWith("\f"))
-                singleLine = singleLine.Substring(1);
+            var line = singleLine.AsSpan();
+            for (int i = 0; i < line.Length; i++)
+            {
+                if (!char.IsControl(line[i]))
+                {
+                    line = line.Slice(i);
+                    break;
+                }
+            }
 
-            if (singleLine.Equals(".") || singleLine.StartsWith("---") || singleLine.StartsWith("SUCCESSFULLY built"))
+            if (line.Length < 3 || line.StartsWith("---".AsSpan()) || line.StartsWith("SUCCESSFULLY built".AsSpan()))
                 return;
 
-            if (singleLine.StartsWith(" . "))
-                singleLine = singleLine.Substring(3);
-            //singleLine = singleLine.Replace(" . ", "   ");
-
-            if (singleLine.StartsWith("..."))
+            if (line[0] == '.')
             {
-                if (singleLine.StartsWith("...patience..."))
-                    return;
+                if (line[1] == '.')
+                {
+                    if (line[2] == '.')
+                    {
+                        var line_ = line.Slice(3);
+                        if (line_.StartsWith("patience...".AsSpan()))
+                            return;
 
-                if (singleLine.StartsWith("...on ") && singleLine.EndsWith("target..."))
-                {
-                    int.TryParse(singleLine.Substring(5, singleLine.IndexOf("th", 6) - 5), out int tmpFinishedCount);
-                    if (targetIndex < finishedCount + tmpFinishedCount - 1)
-                        targetIndex = finishedCount + tmpFinishedCount - 1;
-                    return;
-                }
-                else if (singleLine.StartsWith("...updated ") && singleLine.EndsWith("target(s)..."))
-                {
-                    int.TryParse(singleLine.Substring(11, singleLine.IndexOf(' ', 12) - 11), out int tmpFinishedCount);
-                    finishedCount += tmpFinishedCount;
-                    return;
-                }
-                else if (singleLine.StartsWith("...updating ") && singleLine.EndsWith("target(s)..."))
-                {
-                    int.TryParse(singleLine.Substring(12, singleLine.IndexOf(' ', 13) - 12), out int tmpTargetCount);
-                    targetCount += tmpTargetCount;
-                }
+                        if (line_.StartsWith("on ".AsSpan()))
+                        {
+                            // The length of "on Xth target..." without the number is 21
+                            TryParseInt(line_.Slice(3, length: line_.Length - 15), out int tmpFinishedCount);
+                            if (targetIndex < finishedCount + tmpFinishedCount - 1)
+                                targetIndex = finishedCount + tmpFinishedCount - 1;
+                            return;
+                        }
 
-                Log.LogMessageFromText(string.Join(" ", "JAM:", singleLine.Substring(3, singleLine.Length - 6)), messageImportance);
+                        if (line_.StartsWith("updated ".AsSpan()))
+                        {
+                            // The length of "updated X target(s)..." without the number is 21
+                            TryParseInt(line_.Slice(8, length: line_.Length - 21), out int tmpFinishedCount);
+                            finishedCount += tmpFinishedCount;
+                            return;
+                        }
+
+                        if (line_.StartsWith("updating ".AsSpan()))
+                        {
+                            // The length of "updating X target(s)..." without the number is 22
+                            TryParseInt(line_.Slice(9, length: line_.Length - 22), out int tmpTargetCount);
+                            targetCount += tmpTargetCount;
+                        }
+
+                        Log.LogMessageFromText(line_.Slice(0, length: line_.Length - 3).ToString(), messageImportance);
+                        return;
+                    }
+
+                    if (line[2] == '/')
+                    {
+                        var groups = regexPath.Split(line.ToString());
+                        if (groups.Length == 4)
+                        {
+                            var fullPath = Path.GetFullPath(Path.Combine(GetWorkingDirectory(), groups[1]));
+                            var path = (SolutionDirectory != null && fullPath.StartsWith(SolutionDirectory)) ? fullPath.Replace(SolutionDirectory, "") : fullPath;
+                            Log.LogMessageFromText(string.Join("", path, groups[2]), messageImportance);
+                            return;
+                        }
+                    }
+                    else if (line[2] == '\\')
+                    {
+                        int parentIndex = line.IndexOf('(') - 1;
+                        if (parentIndex > 0)
+                        {
+                            var fullPath = Path.GetFullPath(Path.Combine(GetWorkingDirectory(), line.Slice(0, parentIndex).ToString()));
+                            var path = (SolutionDirectory != null && fullPath.StartsWith(SolutionDirectory)) ? fullPath.Replace(SolutionDirectory, "") : fullPath;
+                            Log.LogMessageFromText(string.Join("", path, line.Slice(parentIndex).ToString()), messageImportance);
+                            return;
+                        }
+                    }
+
+                }
+            }
+
+            if ((regexUnit.IsMatch(singleLine) && !line.StartsWith("buildStamp.c".AsSpan())) || line.StartsWith("generated ".AsSpan()))
+            {
+                var sb = new StringBuilder(16 + line.Length);
+                sb.Append('[');
+                sb.Append(++targetIndex);
+                sb.Append('/');
+                sb.Append(Math.Max(targetIndex, targetCount));
+                sb.Append("] ");
+                Append(ref sb, line);
+
+                Log.LogMessageFromText(sb.ToString(), messageImportance);
                 return;
             }
 
-            if (singleLine.StartsWith("../"))
-            {
-                var groups = regexPath.Split(singleLine);
-                if (groups.Length == 4)
-                {
-                    var fullPath = Path.GetFullPath(Path.Combine(GetWorkingDirectory(), groups[1]));
-                    Log.LogMessageFromText(string.Join("", fullPath, groups[2]), messageImportance);
-                    return;
-                }
-            }
-            else if (singleLine.StartsWith(@"..\"))
-            {
-                int parentIndex = singleLine.IndexOf('(') - 1;
-                if (parentIndex > 0)
-                {
-                    var fullPath = Path.GetFullPath(Path.Combine(GetWorkingDirectory(), singleLine.Substring(0, parentIndex)));
-                    Log.LogMessageFromText(string.Join("", fullPath, singleLine.Substring(parentIndex)), messageImportance);
-                    return;
-                }
-            }
-
-            if ((regexUnit.IsMatch(singleLine) && !singleLine.Equals("buildStamp.c")) || singleLine.StartsWith("generated "))
-                singleLine = string.Join("", "[", ++targetIndex, "/", Math.Max(targetIndex, targetCount), "] ", singleLine);
-            else if (singleLine.StartsWith(@"* copy file to:"))
+            if (line.StartsWith(@"* copy file to:".AsSpan()))
                 ++targetIndex;
+            else if (line.StartsWith(" . ".AsSpan()))
+                line = line.Slice(3);
+            else if (SolutionDirectory != null && line.StartsWith(SolutionDirectory.AsSpan()))
+                line = line.Slice(SolutionDirectory.Length);
 
-            Log.LogMessageFromText(singleLine, messageImportance);
+            Log.LogMessageFromText(line.ToString(), messageImportance);
         }
 
         public static void StopProgram(uint pid)
