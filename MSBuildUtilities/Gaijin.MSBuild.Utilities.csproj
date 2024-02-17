@@ -32,6 +32,9 @@
 		<Description>MSBuild tasks for Dagor Engine when built from Visual Studio</Description>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+		<Version>1.0.1</Version>
+		<FileVersion>$(Version)</FileVersion>
+		<AssemblyVersion>$(Version)</AssemblyVersion>
 	</PropertyGroup>
 
 	<PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug'">
