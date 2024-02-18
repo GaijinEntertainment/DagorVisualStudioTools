@@ -6,7 +6,7 @@
 		<AssemblyName>Gaijin.VisualDagor</AssemblyName>
 		<RootNamespace>Gaijin.VisualDagor</RootNamespace>
 		<Title>Visual Dagor</Title>
-		<Authors>Andris Nyiscsák</Authors>
+		<Authors>András Nyiscsák</Authors>
 		<Company>Gaijin Games KFT</Company>
 		<Description>Visual Studio Extension for more accurate intellisense support with DagorEngine and other develop time features for Visual Studio</Description>
 		<PackageProjectUrl>https://github.com/GaijinEntertainment</PackageProjectUrl>

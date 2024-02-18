@@ -5,7 +5,7 @@
 	<PropertyGroup>
 		<RootNamespace>Gaijin.MSBuild.Utilities</RootNamespace>
 		<AssemblyName>Gaijin.MSBuild.Utilities</AssemblyName>
-		<Authors>Andris Nyiscsák</Authors>
+		<Authors>András Nyiscsák</Authors>
 		<Company>Gaijin Games KFT</Company>
 		<PackageProjectUrl>https://github.com/GaijinEntertainment</PackageProjectUrl>
 		<RepositoryUrl>https://github.com/GaijinEntertainment/DagorVisualStudioTools</RepositoryUrl>
@@ -32,7 +32,7 @@
 		<Description>MSBuild tasks for Dagor Engine when built from Visual Studio</Description>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<AllowUnsafeBlocks>True</AllowUnsafeBlocks>
-		<Version>1.0.1</Version>
+		<Version>1.0.2</Version>
 		<FileVersion>$(Version)</FileVersion>
 		<AssemblyVersion>$(Version)</AssemblyVersion>
 	</PropertyGroup>
