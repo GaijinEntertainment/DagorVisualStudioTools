@@ -12,7 +12,7 @@ namespace Gaijin.MSBuild.Utilities
 {
     public class Exec : Microsoft.Build.Tasks.Exec
     {
-        public string SolutionDirectory { get; set; }
+        public string[] PathtoOmit { get; set; }
 
         readonly Regex regexPath;
         readonly Regex regexUnit;
@@ -45,6 +45,24 @@ namespace Gaijin.MSBuild.Utilities
             {
                 sb.Append(cp, s.Length);
             }
+        }
+
+        private bool FindPathIndextoOmit(ReadOnlySpan<char> path, out int index)
+        {
+            for (index = 0; index < PathtoOmit.Length; index++)
+            {
+                if (path.StartsWith(PathtoOmit[index].AsSpan()))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private bool FindPathIndextoOmit(ref string path, out int index)
+        {
+            return FindPathIndextoOmit(path.AsSpan(), out index);
         }
 
         protected override void LogEventsFromTextOutput(string singleLine, MessageImportance messageImportance)
@@ -106,7 +124,7 @@ namespace Gaijin.MSBuild.Utilities
                         if (groups.Length == 4)
                         {
                             var fullPath = Path.GetFullPath(Path.Combine(GetWorkingDirectory(), groups[1]));
-                            var path = (SolutionDirectory != null && fullPath.StartsWith(SolutionDirectory)) ? fullPath.Replace(SolutionDirectory, "") : fullPath;
+                            string path = FindPathIndextoOmit(ref fullPath, out int index) ? fullPath.Replace(PathtoOmit[index], "") : fullPath;
                             Log.LogMessageFromText(string.Join("", path, groups[2]), messageImportance);
                             return;
                         }
@@ -117,7 +135,7 @@ namespace Gaijin.MSBuild.Utilities
                         if (parentIndex > 0)
                         {
                             var fullPath = Path.GetFullPath(Path.Combine(GetWorkingDirectory(), line.Slice(0, parentIndex).ToString()));
-                            var path = (SolutionDirectory != null && fullPath.StartsWith(SolutionDirectory)) ? fullPath.Replace(SolutionDirectory, "") : fullPath;
+                            string path = FindPathIndextoOmit(ref fullPath, out int index) ? fullPath.Replace(PathtoOmit[index], "") : fullPath;
                             Log.LogMessageFromText(string.Join("", path, line.Slice(parentIndex).ToString()), messageImportance);
                             return;
                         }
@@ -144,8 +162,8 @@ namespace Gaijin.MSBuild.Utilities
                 ++targetIndex;
             else if (line.StartsWith(" . ".AsSpan()))
                 line = line.Slice(3);
-            else if (SolutionDirectory != null && line.StartsWith(SolutionDirectory.AsSpan()))
-                line = line.Slice(SolutionDirectory.Length);
+            else if (FindPathIndextoOmit(line, out int index))
+                line = line.Slice(PathtoOmit[index].Length);
 
             Log.LogMessageFromText(line.ToString(), messageImportance);
         }
