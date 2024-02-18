@@ -49,11 +49,15 @@ namespace Gaijin.MSBuild.Utilities
 
         private bool FindPathIndextoOmit(ReadOnlySpan<char> path, out int index)
         {
-            for (index = 0; index < PathtoOmit.Length; index++)
+            index = 0;
+            if (PathtoOmit != null)
             {
-                if (path.StartsWith(PathtoOmit[index].AsSpan()))
+                for (; index < PathtoOmit.Length; index++)
                 {
-                    return true;
+                    if (path.StartsWith(PathtoOmit[index].AsSpan()))
+                    {
+                        return true;
+                    }
                 }
             }
 
