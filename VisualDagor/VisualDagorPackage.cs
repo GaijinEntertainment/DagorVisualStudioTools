@@ -1,27 +1,33 @@
-﻿using Microsoft.VisualStudio;
-using Microsoft.VisualStudio.Shell;
-using System;
+﻿using System;
 using System.Runtime.InteropServices;
 using System.Threading;
+using Microsoft.VisualStudio.Shell;
+
 using Task = System.Threading.Tasks.Task;
 
-namespace Gaijin.VisualDagor
+namespace Gaijin.VisualDagor;
+
+[PackageRegistration(UseManagedResourcesOnly = true, AllowsBackgroundLoading = true)]
+[Guid(Constants.PackageGuidString)]
+public sealed class Package : AsyncPackage
 {
-    [ProvideAutoLoad(VSConstants.UICONTEXT.SolutionExists_string, PackageAutoLoadFlags.BackgroundLoad)]
-    [PackageRegistration(UseManagedResourcesOnly = true, AllowsBackgroundLoading = true)]
-    [Guid(PackageGuidString)]
-    public sealed class Package : AsyncPackage
+    private readonly StartupProjectWatcher startupProjectWatcher;
+
+    public Package()
     {
-        public const string PackageGuidString = "4c3c1106-0718-453f-9c9a-1a2c60f725c0";
+        startupProjectWatcher = new StartupProjectWatcher();
+    }
 
-        public Package()
-        {
+    protected override async Task InitializeAsync(CancellationToken cancellationToken, IProgress<ServiceProgressData> progress)
+    {
+        await base.InitializeAsync(cancellationToken, progress);
+        await startupProjectWatcher.InitializeAsync(this);
+    }
 
-        }
-
-        protected override async Task InitializeAsync(CancellationToken cancellationToken, IProgress<ServiceProgressData> progress)
-        {
-            await JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
-        }
+    protected override void Dispose(bool disposing)
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+        base.Dispose(disposing);
+        startupProjectWatcher.Dispose();
     }
 }
