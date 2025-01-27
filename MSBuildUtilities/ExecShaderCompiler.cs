@@ -1,30 +1,29 @@
-﻿using Microsoft.Build.Framework;
-using System.IO;
+﻿using System.IO;
 using System.Text.RegularExpressions;
+using Microsoft.Build.Framework;
 
-namespace Gaijin.MSBuild.Utilities
+namespace Gaijin.MSBuild.Utilities;
+
+public class ExecShaderCompiler : Microsoft.Build.Tasks.Exec
 {
-    public class ExecShaderCompiler : Microsoft.Build.Tasks.Exec
+    readonly Regex regexrg;
+
+    public ExecShaderCompiler() : base()
     {
-        readonly Regex regexrg;
+        regexrg = new Regex("(\\[(ERROR|WARNING)\\]) ([\\S]*.sh)(\\(\\d*,\\d*\\)):(.*)");
+    }
 
-        public ExecShaderCompiler() : base()
+    protected override void LogEventsFromTextOutput(string singleLine, MessageImportance messageImportance)
+    {
+        var groups = regexrg.Split(singleLine);
+
+        if (groups.Length == 7)
         {
-            regexrg = new Regex("(\\[(ERROR|WARNING)\\]) ([\\S]*.sh)(\\(\\d*,\\d*\\)):(.*)");
+            Log.LogMessageFromText(Path.GetFullPath(Path.Combine(GetWorkingDirectory(), groups[3])) + groups[4] + (groups[2].Equals("ERROR") ? ": error :" : ": warning :") + groups[5], MessageImportance.High);
         }
-
-        protected override void LogEventsFromTextOutput(string singleLine, MessageImportance messageImportance)
+        else
         {
-            var groups = regexrg.Split(singleLine);
-
-            if (groups.Length == 7)
-            {
-                Log.LogMessageFromText(Path.GetFullPath(Path.Combine(GetWorkingDirectory(), groups[3])) + groups[4] + (groups[2].Equals("ERROR") ? ": error :" : ": warning :") + groups[5], MessageImportance.High);
-            }
-            else
-            {
-                Log.LogMessageFromText(singleLine, messageImportance);
-            }
+            Log.LogMessageFromText(singleLine, messageImportance);
         }
     }
 }

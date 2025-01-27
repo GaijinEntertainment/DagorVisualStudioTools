@@ -1,86 +1,60 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="15.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-	<Import Sdk="Microsoft.NET.Sdk" Project="Sdk.props" />
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>13.0</LangVersion>
+    <AssemblyName>Gaijin.MSBuild.Utilities</AssemblyName>
+    <RootNamespace>Gaijin.MSBuild.Utilities</RootNamespace>
+    <Title>Gaijin.MSBuild.Utilities</Title>
+    <Version>1.0.2.0</Version>
+    <Authors>Andris Nyiscsák</Authors>
+    <Company>Gaijin Games KFT</Company>
+    <Description>MSBuild tasks for Dagor Engine when built from Visual Studio</Description>
+    <Copyright>© Gaijin Entertainment</Copyright>
+    <PackageProjectUrl>https://github.com/GaijinEntertainment</PackageProjectUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/GaijinEntertainment/DagorVisualStudioTools</RepositoryUrl>
+    <PackageTags>Dagor;DagorEngine</PackageTags>
+    <AssemblyVersion>$(Version)</AssemblyVersion>
+    <FileVersion>$(Version)</FileVersion>
 
-	<PropertyGroup>
-		<RootNamespace>Gaijin.MSBuild.Utilities</RootNamespace>
-		<AssemblyName>Gaijin.MSBuild.Utilities</AssemblyName>
-		<Authors>András Nyiscsák</Authors>
-		<Company>Gaijin Games KFT</Company>
-		<PackageProjectUrl>https://github.com/GaijinEntertainment</PackageProjectUrl>
-		<RepositoryUrl>https://github.com/GaijinEntertainment/DagorVisualStudioTools</RepositoryUrl>
-	</PropertyGroup>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
 
-	<PropertyGroup>
-		<TargetFramework>net472</TargetFramework>
-		<OutputType>Library</OutputType>
-		<UseCodebase>true</UseCodebase>
-		<AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
-		<GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
+    <GenerateAssemblyConfigurationAttribute>false</GenerateAssemblyConfigurationAttribute>
+    <GenerateAssemblyCompanyAttribute>True</GenerateAssemblyCompanyAttribute>
+    <GenerateAssemblyFileVersionAttribute>True</GenerateAssemblyFileVersionAttribute>
+    <GenerateAssemblyProductAttribute>True</GenerateAssemblyProductAttribute>
+    <GenerateAssemblyTitleAttribute>False</GenerateAssemblyTitleAttribute>
+    <GenerateAssemblyVersionAttribute>True</GenerateAssemblyVersionAttribute>
+  </PropertyGroup>
 
-		<GeneratePkgDefFile>false</GeneratePkgDefFile>
-		<IncludeAssemblyInVSIXContainer>false</IncludeAssemblyInVSIXContainer>
-		<IncludeDebugSymbolsInVSIXContainer>false</IncludeDebugSymbolsInVSIXContainer>
-		<IncludeDebugSymbolsInLocalVSIXDeployment>false</IncludeDebugSymbolsInLocalVSIXDeployment>
-		<CopyBuildOutputToOutputDirectory>false</CopyBuildOutputToOutputDirectory>
-		<CopyOutputSymbolsToOutputDirectory>false</CopyOutputSymbolsToOutputDirectory>
-		<CreateVsixContainer>False</CreateVsixContainer>
-		<DeployExtension>False</DeployExtension>
-		<VSToolsPath Condition="'$(VSToolsPath)' == ''">$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)</VSToolsPath>
-		<Title>Gaijin MSBuild Utilities</Title>
-		<Copyright>© Gaijin Entertainment</Copyright>
-		<Description>MSBuild tasks for Dagor Engine when built from Visual Studio</Description>
-		<PackageReadmeFile>README.md</PackageReadmeFile>
-		<AllowUnsafeBlocks>True</AllowUnsafeBlocks>
-		<Version>1.0.2</Version>
-		<FileVersion>$(Version)</FileVersion>
-		<AssemblyVersion>$(Version)</AssemblyVersion>
-	</PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <DebugType>none</DebugType>
+  </PropertyGroup>
 
-	<PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug'">
-		<DeployExtension>True</DeployExtension>
-	</PropertyGroup>
+  <ItemGroup>
+    <None Include="..\README.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+  </ItemGroup>
 
-	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
-		<WarningLevel>9999</WarningLevel>
-		<DebugType>full</DebugType>
-		<NoWarn>1701;1702</NoWarn>
-	</PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.VisualStudio.SDK" Version="17.12.40479" />
+    <PackageReference Include="Microsoft.VSSDK.BuildTools" Version="17.12.2091">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="System.Diagnostics.Process" Version="4.3.0" />
+    <PackageReference Include="System.Text.RegularExpressions" Version="4.3.1" />
+  </ItemGroup>
 
-	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
-		<WarningLevel>9999</WarningLevel>
-		<DebugType>none</DebugType>
-		<NoWarn>1701;1702</NoWarn>
-	</PropertyGroup>
-
-	<ItemGroup>
-	  <None Include="..\README.md">
-	    <Pack>True</Pack>
-	    <PackagePath>\</PackagePath>
-	  </None>
-	</ItemGroup>
-
-	<ItemGroup>
-		<PackageReference Include="Microsoft.VisualStudio.SDK" Version="17.9.37000" ExcludeAssets="runtime">
-			<IncludeAssets>compile; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-		</PackageReference>
-		<PackageReference Include="Microsoft.VSSDK.BuildTools" Version="17.9.3168">
-			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-			<PrivateAssets>all</PrivateAssets>
-		</PackageReference>
-		<PackageReference Include="System.Diagnostics.Process" Version="4.3.0" />
-		<PackageReference Include="System.Text.RegularExpressions" Version="4.3.1" />
-	</ItemGroup>
-	<ItemGroup>
-		<Reference Include="Microsoft.Build.Tasks.Core">
-			<HintPath>$(MSBuildBinPath)\Microsoft.Build.Tasks.Core.dll</HintPath>
-		</Reference>
-		<Reference Include="Microsoft.Build.Utilities.Core">
-			<HintPath>$(MSBuildBinPath)\Microsoft.Build.Utilities.Core.dll</HintPath>
-		</Reference>
-		<Reference Include="System.Management" />
-	</ItemGroup>
-
-	<Import Sdk="Microsoft.NET.Sdk" Project="Sdk.targets" />
-	<Import Project="$(VSToolsPath)\VSSDK\Microsoft.VsSDK.targets" Condition="'$(VSToolsPath)' != ''" />
+  <ItemGroup>
+    <Reference Include="Microsoft.Build.Tasks.Core">
+      <HintPath>$(MSBuildBinPath)\Microsoft.Build.Tasks.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Build.Utilities.Core">
+      <HintPath>$(MSBuildBinPath)\Microsoft.Build.Utilities.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Management" />
+  </ItemGroup>
 </Project>

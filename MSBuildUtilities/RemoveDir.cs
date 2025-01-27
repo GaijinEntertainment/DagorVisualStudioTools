@@ -1,19 +1,18 @@
 ﻿using Microsoft.Build.Framework;
 
-namespace Gaijin.MSBuild.Utilities
-{
-    public class RemoveDir : Microsoft.Build.Utilities.Task
-    {
-        [Required]
-        public string Directory { get; set; }
+namespace Gaijin.MSBuild.Utilities;
 
-        public sealed override bool Execute()
+public class RemoveDir : Microsoft.Build.Utilities.Task
+{
+    [Required]
+    public string Directory { get; set; }
+
+    public sealed override bool Execute()
+    {
+        if (System.IO.Directory.Exists(Directory))
         {
-            if (System.IO.Directory.Exists(Directory))
-            {
-                System.IO.Directory.Delete(Directory, true);
-            }
-            return !System.IO.Directory.Exists(Directory);
+            System.IO.Directory.Delete(Directory, true);
         }
+        return !System.IO.Directory.Exists(Directory);
     }
 }
