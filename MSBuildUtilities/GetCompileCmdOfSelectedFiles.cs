@@ -1,13 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
 using Microsoft.Build.Framework;
 using Microsoft.Build.Utilities;
 
 namespace Gaijin.MSBuild.Utilities;
 
-public class GetCompileCmdOfSelectedFiles : Microsoft.Build.Utilities.Task
+public sealed class GetCompileCmdOfSelectedFiles : Microsoft.Build.Utilities.Task
 {
     [Required]
     public string BuildCommand { get; set; }
@@ -20,115 +19,104 @@ public class GetCompileCmdOfSelectedFiles : Microsoft.Build.Utilities.Task
     [Output]
     public ITaskItem[] Commands { get; set; }
     [Output]
-    public ITaskItem[] SkippedFiles { get; set; }
+    public string SkippedFiles { get; set; }
 
     public sealed override bool Execute()
     {
-        Process jamBuild = new();
-        jamBuild.StartInfo.UseShellExecute = false;
-        jamBuild.StartInfo.RedirectStandardOutput = true;
-        jamBuild.StartInfo.FileName = "jam";
-        jamBuild.StartInfo.Arguments = BuildCommand + " -a -n";
-        jamBuild.StartInfo.WorkingDirectory = WorkDirectory;
-
-        var selectedFiles = new List<string>();
-        foreach (var selectedFile in SelectedFiles)
+        List<FileDesc> selectedFiles = [];
+        for (int i = 0; i < SelectedFiles.Length; i++)
         {
-            selectedFiles.Add(selectedFile.Replace('\\', '/'));
+            selectedFiles.Add(new FileDesc(SelectedFiles[i].Replace('\\', '/'), i));
         }
 
-        jamBuild.Start();
-        string buildLog = jamBuild.StandardOutput.ReadToEnd();
-        jamBuild.WaitForExit();
+        List<TaskItem> commands = [];
 
-        var commands = new List<TaskItem>();
-
-        using (StringReader reader = new(buildLog))
+        void runJam(Process jamBuild)
         {
-            string line;
-            while ((line = reader.ReadLine()) != null)
+            jamBuild.StartInfo.UseShellExecute = false;
+            jamBuild.StartInfo.RedirectStandardOutput = true;
+            jamBuild.StartInfo.FileName = "jam";
+            jamBuild.StartInfo.WorkingDirectory = WorkDirectory;
+
+            jamBuild.OutputDataReceived += (s, e) =>
             {
-                bool executionLine = false;
-                int skipLeadingChar = 0;
-
-                if (line.StartsWith("  call_filtered "))
+                bool filtered = false;
+                var line = e.Data.AsSpan();
+                if (line.StartsWith("  call_filtered ".AsSpan()))
                 {
-                    executionLine = true;
-                    skipLeadingChar = 16;
+                    line = line.Slice(16, line.Length - 19);
+                    filtered = true;
                 }
-                else if (line.StartsWith("  call "))
+                else if (line.StartsWith("  call ".AsSpan()))
                 {
-                    executionLine = true;
-                    skipLeadingChar = 7;
+                    line = line.Slice(7);
+                }
+                else
+                {
+                    return;
                 }
 
-                if (executionLine)
+                for (int i = 0; i < selectedFiles.Count; i++)
                 {
-                    foreach (var selectedFile in selectedFiles)
+                    if (line.EndsWith(selectedFiles[i].File.AsSpan()))
                     {
-                        bool rightLine = false;
+                        Span<char> command = stackalloc char[line.Length];
+                        line.CopyTo(command);
 
-                        if (line.EndsWith(selectedFile + ")\\#"))
+                        for (int j = 0; j < ExcludeArgs.Length; j++)
+                            for (int index = command.IndexOf(ExcludeArgs[j].AsSpan()), k = index; k < index + ExcludeArgs[j].Length; k++)
+                                command[k] = ' ';
+
+                        if (filtered)
                         {
-                            rightLine = true;
-                            line = line.Substring(0, line.Length - 3).Replace("#\\(", "");
-                        }
-                        else if (line.EndsWith(selectedFile))
-                        {
-                            rightLine = true;
+                            int index = command.IndexOf("#\\(".AsSpan());
+                            command[index] = ' ';
+                            command[index + 1] = ' ';
+                            command[index + 2] = ' ';
                         }
 
-                        if (rightLine)
-                        {
-                            selectedFiles.Remove(selectedFile);
+                        TaskItem commandItem = new(command.ToString());
+                        commandItem.SetMetadata("File", SelectedFiles[selectedFiles[i].Index]);
+                        commands.Add(commandItem);
+                        selectedFiles.RemoveAt(i);
 
-                            int outputPosition = line.LastIndexOf("-Fo") + 3;
-                            if (outputPosition == 2)
-                                outputPosition = line.LastIndexOf(" -o ") + 4;
-                            if (outputPosition == 3)
-                                return false;
-                            int lastSpace = line.LastIndexOf(" ");
+                        if (selectedFiles.Count == 0)
+                            jamBuild.Kill();
 
-                            var outDir = Path.GetDirectoryName(new Uri(WorkDirectory + line.Substring(outputPosition, lastSpace - outputPosition)).LocalPath);
-                            if (!Directory.Exists(outDir))
-                            {
-                                Directory.CreateDirectory(outDir);
-                            }
-
-                            var command = line.Substring(skipLeadingChar, line.Length - skipLeadingChar);
-
-                            foreach (var excludeArg in ExcludeArgs)
-                            {
-                                command = command.Replace(excludeArg, "");
-                            }
-
-                            var commandItem = new TaskItem(command);
-                            commandItem.SetMetadata("File", selectedFile.Replace('/', '\\'));
-                            commands.Add(commandItem);
-
-                            break;
-                        }
-                    }
-
-                    if (selectedFiles.Count == 0)
-                    {
                         break;
                     }
                 }
-            }
+            };
+
+            jamBuild.Start();
+            jamBuild.BeginOutputReadLine();
+            jamBuild.WaitForExit();
         }
 
-        Commands = [.. commands];
+        {
+            using Process jamBuild = new();
+            jamBuild.StartInfo.Arguments = BuildCommand + " -sSkipDigestProecssing -n -dx";
+            runJam(jamBuild);
+        }
 
         if (selectedFiles.Count > 0)
         {
-            SkippedFiles = new TaskItem[selectedFiles.Count];
-            for (int i = 0; i < selectedFiles.Count; i++)
-            {
-                SkippedFiles[i] = new TaskItem(selectedFiles[i].Replace('/', '\\'));
-            }
+            using Process jamBuild = new();
+            jamBuild.StartInfo.Arguments = BuildCommand + " -sSkipDigestProecssing -n -dx -a";
+            runJam(jamBuild);
         }
 
+        Commands = [.. commands];
+        SkippedFiles = string.Join("\n", selectedFiles);
+
         return true;
+    }
+
+    private readonly struct FileDesc(string file, int index)
+    {
+        public string File { get; } = file;
+        public int Index { get; } = index;
+
+        public override string ToString() => File;
     }
 }
