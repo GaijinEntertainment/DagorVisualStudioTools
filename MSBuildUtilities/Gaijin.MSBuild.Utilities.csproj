@@ -5,7 +5,7 @@
     <AssemblyName>Gaijin.MSBuild.Utilities</AssemblyName>
     <RootNamespace>Gaijin.MSBuild.Utilities</RootNamespace>
     <Title>Gaijin.MSBuild.Utilities</Title>
-    <Version>1.0.2.0</Version>
+    <Version>1.0.3.0</Version>
     <Authors>Andris Nyiscsák</Authors>
     <Company>Gaijin Games KFT</Company>
     <Description>MSBuild tasks for Dagor Engine when built from Visual Studio</Description>
@@ -25,6 +25,7 @@
     <GenerateAssemblyProductAttribute>True</GenerateAssemblyProductAttribute>
     <GenerateAssemblyTitleAttribute>False</GenerateAssemblyTitleAttribute>
     <GenerateAssemblyVersionAttribute>True</GenerateAssemblyVersionAttribute>
+    <SupportedOSPlatformVersion>10.0.22000.0</SupportedOSPlatformVersion>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
