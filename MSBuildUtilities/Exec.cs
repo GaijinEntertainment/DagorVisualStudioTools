@@ -90,35 +90,38 @@ public class Exec : Microsoft.Build.Tasks.Exec
             {
                 if (line[2] == '.')
                 {
-                    var line_ = line.Slice(3);
-                    if (line_.StartsWith("patience...".AsSpan()))
+                    line = line.Slice(3);
+                    if (line.StartsWith("patience...".AsSpan()))
                         return;
 
-                    if (line_.StartsWith("on ".AsSpan()))
+                    if (line.StartsWith(" cleaning modules for ".AsSpan()))
+                        return;
+
+                    if (line.StartsWith("on ".AsSpan()))
                     {
                         // The length of "on Xth target..." without the number is 21
-                        TryParseInt(line_.Slice(3, length: line_.Length - 15), out int tmpFinishedCount);
+                        TryParseInt(line.Slice(3, length: line.Length - 15), out int tmpFinishedCount);
                         if (targetIndex < finishedCount + tmpFinishedCount - 1)
                             targetIndex = finishedCount + tmpFinishedCount - 1;
                         return;
                     }
 
-                    if (line_.StartsWith("updated ".AsSpan()))
+                    if (line.StartsWith("updated ".AsSpan()))
                     {
                         // The length of "updated X target(s)..." without the number is 21
-                        TryParseInt(line_.Slice(8, length: line_.Length - 21), out int tmpFinishedCount);
+                        TryParseInt(line.Slice(8, length: line.Length - 21), out int tmpFinishedCount);
                         finishedCount += tmpFinishedCount;
                         return;
                     }
 
-                    if (line_.StartsWith("updating ".AsSpan()))
+                    if (line.StartsWith("updating ".AsSpan()))
                     {
                         // The length of "updating X target(s)..." without the number is 22
-                        TryParseInt(line_.Slice(9, length: line_.Length - 22), out int tmpTargetCount);
+                        TryParseInt(line.Slice(9, length: line.Length - 22), out int tmpTargetCount);
                         targetCount += tmpTargetCount;
                     }
 
-                    Log.LogMessageFromText(line_.Slice(0, length: line_.Length - 3).ToString(), messageImportance);
+                    Log.LogMessageFromText(line.Slice(0, length: line.Length - 3).ToString(), messageImportance);
                     return;
                 }
 

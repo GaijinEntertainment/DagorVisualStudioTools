@@ -1,8 +1,8 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using Microsoft.Build.Framework;
 using Microsoft.Build.Utilities;
-using Newtonsoft.Json;
 
 namespace Gaijin.MSBuild.Utilities;
 
@@ -14,7 +14,6 @@ public sealed class GetCompileCmdOfSelectedFiles : Microsoft.Build.Utilities.Tas
     public string WorkDirectory { get; set; }
     [Required]
     public string[] SelectedFiles { get; set; }
-    public string[] ExcludeArgs { get; set; }
 
     [Output]
     public ITaskItem[] Commands { get; set; }
@@ -35,7 +34,7 @@ public sealed class GetCompileCmdOfSelectedFiles : Microsoft.Build.Utilities.Tas
         {
             StartInfo = new()
             {
-                Arguments = BuildCommand + " -sDumpBuildCmd=yes -d0 -a -n",
+                Arguments = BuildCommand + " -sDumpBuildCmds=yes -d0 -a -n",
                 FileName = "jam",
                 RedirectStandardOutput = true,
                 UseShellExecute = false,
@@ -43,35 +42,54 @@ public sealed class GetCompileCmdOfSelectedFiles : Microsoft.Build.Utilities.Tas
             }
         })
         {
-            var serializer = JsonSerializer.Create();
-
-            jamBuild.Start();
-
-            using JsonTextReader jsonReader = new(jamBuild.StandardOutput);
-
-            jsonReader.Read(); // move to start of first object
-            while (jsonReader.Read() && jsonReader.TokenType != JsonToken.EndArray)
+            // This parser expects the {"directory": ,"arguments": , "output": "file": } line format
+            jamBuild.OutputDataReceived += (s, e) =>
             {
-                var compileCommand = serializer.Deserialize<CompileCommand>(jsonReader);
+                if (e.Data is null || !e.Data.EndsWith("\" }, "))
+                    return;
+
+                var line = e.Data.AsSpan(0, e.Data.Length - 5); // the length of ' }, 'at end of line
+
                 for (int i = 0; i < selectedFiles.Count; i++)
                 {
-                    if (compileCommand.File.EndsWith(selectedFiles[i].File))
+                    if (!line.EndsWith(selectedFiles[i].File.AsSpan()))
+                        continue;
+
+                    int argStart = line.IndexOf('[') + 1;
+                    Span<char> command = stackalloc char[line.Length - argStart];
+                    line.Slice(argStart).CopyTo(command);
+
+                    //               ], "output" : "
+                    var outputArg = "            -Fo".AsSpan();
+                    //             "file" : "
+                    var fileArg = "          ".AsSpan();
+
+                    outputArg.CopyTo(command.Slice(command.LastIndexOf(']'), outputArg.Length));
+                    fileArg.CopyTo(command.Slice(command.LastIndexOf("\"file\" : \"".AsSpan()), fileArg.Length));
+
+                    for (int j = 0; j < command.Length; j++)
                     {
-                        TaskItem commandItem = new(string.Join(" ", compileCommand.Arguments));
-                        commandItem.SetMetadata("File", SelectedFiles[selectedFiles[i].Index]);
-                        commands.Add(commandItem);
-                        selectedFiles.RemoveAt(i);
-
-                        if (selectedFiles.Count == 0)
-                            goto KillJamBuild;
-
-                        break;
+                        if (command[j] == '\\')
+                            j++;
+                        else if (command[j] == '"' || command[j] == ',')
+                            command[j] = ' ';
                     }
-                }
-            }
 
-        KillJamBuild:
-            jamBuild.Kill();
+                    TaskItem commandItem = new(command.ToString());
+                    commandItem.SetMetadata("File", SelectedFiles[selectedFiles[i].Index]);
+                    commands.Add(commandItem);
+                    selectedFiles.RemoveAt(i);
+
+                    if (selectedFiles.Count == 0)
+                        jamBuild.Kill();
+
+                    return;
+                }
+            };
+
+            jamBuild.Start();
+            jamBuild.BeginOutputReadLine();
+            jamBuild.WaitForExit();
         }
 
         Commands = [.. commands];
