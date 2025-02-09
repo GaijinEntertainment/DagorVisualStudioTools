@@ -40,8 +40,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.VisualStudio.SDK" Version="17.12.40479" />
-    <PackageReference Include="Microsoft.VSSDK.BuildTools" Version="17.12.2091">
+    <PackageReference Include="Microsoft.VisualStudio.SDK" Version="17.13.40023" />
+    <PackageReference Include="Microsoft.VSSDK.BuildTools" Version="17.13.2126">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>

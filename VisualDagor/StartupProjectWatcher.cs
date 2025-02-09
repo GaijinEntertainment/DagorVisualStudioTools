@@ -10,7 +10,7 @@ using Task = System.Threading.Tasks.Task;
 
 namespace Gaijin.VisualDagor;
 
-internal sealed class StartupProjectWatcher : IDisposable, IVsSelectionEvents, IVsSolutionEvents3, IVsUpdateSolutionEvents2
+internal sealed class StartupProjectWatcher : IDisposable, IVsSelectionEvents, IVsSolutionEvents3, IVsUpdateSolutionEvents2, IVsHierarchyEvents
 {
     private const int S_OK = VSConstants.S_OK;
     private const uint VSCOOKIE_NIL = VSConstants.VSCOOKIE_NIL;
@@ -27,6 +27,7 @@ internal sealed class StartupProjectWatcher : IDisposable, IVsSelectionEvents, I
     private uint updateSolutionEventsCookie = VSCOOKIE_NIL;
 
     private IVsHierarchy startupProject = null;
+    private uint hierarchyEventsCookie = VSCOOKIE_NIL;
     private readonly List<IVsHierarchy> dagorSharedProjects = [];
 
     /// <summary>
@@ -85,6 +86,12 @@ internal sealed class StartupProjectWatcher : IDisposable, IVsSelectionEvents, I
             solutionBuildService.UnadviseUpdateSolutionEvents(updateSolutionEventsCookie);
             updateSolutionEventsCookie = VSCOOKIE_NIL;
         }
+
+        if (startupProject is not null && hierarchyEventsCookie != VSCOOKIE_NIL)
+        {
+            startupProject.UnadviseHierarchyEvents(hierarchyEventsCookie);
+            hierarchyEventsCookie = VSCOOKIE_NIL;
+        }
     }
 
     #region IVsSelectionEvents Implementation
@@ -98,39 +105,27 @@ internal sealed class StartupProjectWatcher : IDisposable, IVsSelectionEvents, I
         }
         return S_OK;
     }
-
     public int OnSelectionChanged(IVsHierarchy pHierOld, uint itemidOld, IVsMultiItemSelect pMISOld, ISelectionContainer pSCOld, IVsHierarchy pHierNew, uint itemidNew, IVsMultiItemSelect pMISNew, ISelectionContainer pSCNew) => S_OK;
     public int OnCmdUIContextChanged(uint dwCmdUICookie, int fActive) => S_OK;
     #endregion
 
     #region IVsSolutionEvents3 Implementation
-    public int OnAfterOpenProject(IVsHierarchy pHierarchy, int fAdded) => S_OK;
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "VSTHRD010:Invoke single-threaded types on Main thread")]
+    public int OnAfterOpenProject(IVsHierarchy pHierarchy, int fAdded) => OnNewProject(pHierarchy);
     public int OnQueryCloseProject(IVsHierarchy pHierarchy, int fRemoving, ref int pfCancel) => S_OK;
     public int OnBeforeCloseProject(IVsHierarchy pHierarchy, int fRemoved)
     {
         dagorSharedProjects.Remove(pHierarchy);
         return S_OK;
     }
-
-    public int OnAfterLoadProject(IVsHierarchy pStubHierarchy, IVsHierarchy pRealHierarchy)
-    {
-        ThreadHelper.ThrowIfNotOnUIThread();
-
-        if (pRealHierarchy.IsCapabilityMatch(Constants.DagorSharedProjectIdentifier))
-        {
-            dagorSharedProjects.Add(pRealHierarchy);
-            UpdatedGlobalProperties();
-        }
-        return S_OK;
-    }
-
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "VSTHRD010:Invoke single-threaded types on Main thread")]
+    public int OnAfterLoadProject(IVsHierarchy pStubHierarchy, IVsHierarchy pRealHierarchy) => OnNewProject(pRealHierarchy);
     public int OnQueryUnloadProject(IVsHierarchy pRealHierarchy, ref int pfCancel) => S_OK;
     public int OnBeforeUnloadProject(IVsHierarchy pRealHierarchy, IVsHierarchy pStubHierarchy)
     {
         dagorSharedProjects.Remove(pRealHierarchy);
         return S_OK;
     }
-
     public int OnAfterOpenSolution(object pUnkReserved, int fNewSolution) => S_OK;
     public int OnQueryCloseSolution(object pUnkReserved, ref int pfCancel) => S_OK;
     public int OnBeforeCloseSolution(object pUnkReserved) => S_OK;
@@ -153,13 +148,26 @@ internal sealed class StartupProjectWatcher : IDisposable, IVsSelectionEvents, I
 
         if (pIVsHierarchy == startupProject)
         {
-            UpdatedGlobalProperties();
+            ApplyStartupProjectProperties();
         }
         return S_OK;
     }
-
     public int UpdateProjectCfg_Begin(IVsHierarchy pHierProj, IVsCfg pCfgProj, IVsCfg pCfgSln, uint dwAction, ref int pfCancel) => S_OK;
     public int UpdateProjectCfg_Done(IVsHierarchy pHierProj, IVsCfg pCfgProj, IVsCfg pCfgSln, uint dwAction, int fSuccess, int fCancel) => S_OK;
+    #endregion
+
+    #region IVsHierarchyEvents Implementation
+    public int OnItemAdded(uint itemidParent, uint itemidSiblingPrev, uint itemidAdded) => S_OK;
+    public int OnItemsAppended(uint itemidParent) => S_OK;
+    public int OnItemDeleted(uint itemid) => S_OK;
+    public int OnPropertyChanged(uint itemid, int propid, uint flags)
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+        ApplyStartupProjectProperties();
+        return S_OK;
+    }
+    public int OnInvalidateItems(uint itemidParent) => S_OK;
+    public int OnInvalidateIcon(IntPtr hicon) => S_OK;
     #endregion
 
     private void OnStartupProjectChanged(IVsHierarchy pHierarchy)
@@ -167,29 +175,99 @@ internal sealed class StartupProjectWatcher : IDisposable, IVsSelectionEvents, I
         var newStartupProject = dagorSharedProjects.Contains(pHierarchy) || !pHierarchy.IsCapabilityMatch(Constants.DagorProjectIdentifier) ? null : pHierarchy;
         if (newStartupProject is null && startupProject is null)
             return;
-
-        startupProject = newStartupProject;
 #if DEBUG
         ThreadHelper.ThrowIfNotOnUIThread();
 #endif
-        UpdatedGlobalProperties();
+        if (hierarchyEventsCookie != VSCOOKIE_NIL)
+            startupProject.UnadviseHierarchyEvents(hierarchyEventsCookie);
+
+        startupProject = newStartupProject;
+
+        startupProject.AdviseHierarchyEvents(this, out hierarchyEventsCookie);
+
+        ApplyStartupProjectProperties();
     }
 
-    private void UpdatedGlobalProperties()
+    private int OnNewProject(IVsHierarchy pHierarchy)
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+
+        if (!dagorSharedProjects.Contains(pHierarchy) && pHierarchy.IsCapabilityMatch(Constants.DagorSharedProjectIdentifier))
+        {
+            dagorSharedProjects.Add(pHierarchy);
+            ApplyStartupProjectProperties(pHierarchy);
+        }
+        return S_OK;
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "VSTHRD010:Invoke single-threaded types on Main thread")]
+    private void ApplyStartupProjectProperties()
+    {
+        if (dagorSharedProjects.Count == 0)
+            return;
+
+        ApplyStartupProjectProperties(dagorSharedProjects);
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "VSTHRD010:Invoke single-threaded types on Main thread")]
+    private void ApplyStartupProjectProperties(IVsHierarchy project) => ApplyStartupProjectProperties([project]);
+
+    private void ApplyStartupProjectProperties(List<IVsHierarchy> projects)
     {
 #if DEBUG
         ThreadHelper.ThrowIfNotOnUIThread();
 #endif
         try
         {
-            string property = startupProject is null ? "" : MSBuildHelper.GetPropertyValueForActiveConfig(startupProject, Constants.PreprocessorProperty);
-            for (int i = 0; i < dagorSharedProjects.Count; i++)
+            string workingDir = "";
+            string commandLine = "";
+            string preprocessor = "";
+            if (startupProject is not null //
+                && MSBuildHelper.GetProject(startupProject)?.Object is VCProject vCProject //
+                && vCProject?.ActiveConfiguration is VCConfiguration3 vcCfg)
             {
-                var dagorSharedProject = MSBuildHelper.GetProject(dagorSharedProjects[i])?.Object as VCProject;
-                dynamic debugSettings = dagorSharedProject?.ActiveConfiguration?.DebugSettings;
-                if (debugSettings is not null)
+                workingDir = vcCfg.GetEvaluatedPropertyValue(Constants.WorkingDirProperty);
+                commandLine = vcCfg.GetEvaluatedPropertyValue(Constants.CommandLineProperty);
+                preprocessor = vcCfg.GetEvaluatedPropertyValue(Constants.PreprocessorProperty);
+            }
+
+            for (int i = 0; i < projects.Count; i++)
+            {
+                var dagorSharedProject = MSBuildHelper.GetProject(projects[i])?.Object as VCProject;
+                var activeConfiguration = dagorSharedProject?.ActiveConfiguration;
+                dynamic debugSettings = activeConfiguration?.DebugSettings;
+                if (activeConfiguration?.Rules?.Item(Constants.RuleIdentifier) is IVCRulePropertyStorage sharedProjectRule && debugSettings is not null)
                 {
-                    debugSettings.HttpUrl = property;
+                    bool dirty = false;
+                    var oldWorkingDir = sharedProjectRule.GetEvaluatedPropertyValue(Constants.WorkingDirProperty);
+                    if (oldWorkingDir != workingDir)
+                    {
+                        sharedProjectRule.SetPropertyValue(Constants.WorkingDirProperty, workingDir);
+                        dirty = true;
+                    }
+
+                    var oldCommandLine = sharedProjectRule.GetEvaluatedPropertyValue(Constants.CommandLineProperty);
+                    if (oldCommandLine != commandLine)
+                    {
+                        sharedProjectRule.SetPropertyValue(Constants.CommandLineProperty, commandLine);
+                        dirty = true;
+                    }
+
+                    var oldPreprocessor = sharedProjectRule.GetEvaluatedPropertyValue(Constants.PreprocessorProperty);
+                    if (oldPreprocessor != preprocessor)
+                    {
+                        sharedProjectRule.SetPropertyValue(Constants.PreprocessorProperty, preprocessor);
+                        dirty = true;
+                    }
+
+                    if (!dirty)
+                        continue;
+
+                    int newVal = workingDir.Length + commandLine.Length + preprocessor.Length;
+                    if (debugSettings.HttpUrl.Length != newVal)
+                    {
+                        debugSettings.HttpUrl = newVal == 0 ? string.Empty : DateTime.UtcNow.Ticks.ToString();
+                    }
                 }
             }
         }
@@ -207,7 +285,7 @@ internal sealed class StartupProjectWatcher : IDisposable, IVsSelectionEvents, I
         solutionService.GetProjectEnum((uint)property, ref guid, out IEnumHierarchies enumerator);
 
         IVsHierarchy[] hierarchy = [null];
-        for (enumerator.Reset(); enumerator.Next(1, hierarchy, out uint fetched) == VSConstants.S_OK && fetched == 1;)
+        for (enumerator.Reset(); enumerator.Next(1, hierarchy, out uint fetched) == S_OK && fetched == 1;)
         {
             yield return hierarchy[0];
         }
